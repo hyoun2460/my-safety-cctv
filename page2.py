@@ -66,9 +66,14 @@ with col_left:
     # --- 경고 로그 탭 ---
     with tab_warn:
         # 탭 전환 시 혼선 방지를 위해 라디오 버튼 선택 시 세션 상태와 연동되게끔 단독 처리 유도
-        if st.active_page == "page2": # 활성화 체크용
-            pass 
         category_key_w = "경고 (미착용)"
+        warn_list = st.session_state.mock_logs[category_key_w]
+        log_options_w = [f"[{log['status']}] {log['time']} | {log['channel']} - {log['type']}" for log in warn_list]
+        if log_options_w:
+            selected_idx_w = st.radio("경고 로그 목록을 선택하세요", range(len(log_options_w)), key="radio_warn")
+            # 복잡한 컨테이너 조건 없이 깔끔하게 매핑
+            selected_log = warn_list[selected_idx_w]
+            category_key = category_key_w
         warn_list = st.session_state.mock_logs[category_key_w]
         log_options_w = [f"[{log['status']}] {log['time']} | {log['channel']} - {log['type']}" for log in warn_list]
         if log_options_w:
