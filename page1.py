@@ -4,99 +4,153 @@ import numpy as np
 import time
 import random
 
-st.title("🎥 실시간 CCTV 안전 관제")
-st.markdown("CCTV 영상을 분석하여 작업자의 이상 행동 및 보호구 착용 여부를 실시간으로 모니터링합니다.")
+st.title("🎥 실시간 CCTV 멀티 관제 (최대 4채널)")
+st.markdown("CCTV 채널별 영상을 분석하여 작업자의 이상 행동 및 보호구 착용 여부를 실시간으로 모니터링합니다.")
 
-# ⚙️ 기존 app.py에 있던 사이드바 메뉴를 page1.py 내부로 이사
-st.sidebar.markdown("## ⚙️ CCTV 제어 및 설정")
+# ⚙️ 사이드바 제어 및 설정
+st.sidebar.markdown("## ⚙️ 멀티 CCTV 설정")
 
-# 비디오 소스 선택 위젯
-video_source = st.sidebar.selectbox(
-    "CCTV 영상 소스 선택", 
-    ["샘플 비디오 (0번 웹캠 대체)", "직접 영상 경로 입력"]
-)
+# 1. 활성화할 CCTV 개수 선택
+cctv_count = st.sidebar.slider("활성화할 CCTV 대수", min_value=1, max_value=4, value=2)
 
-# 선택에 따른 소스 경로 지정
-if video_source == "샘플 비디오 (0번 웹캠 대체)":
-    video_path = 0  # 내장 웹캠 혹은 테스트용 0번
-else:
-    video_path = st.sidebar.text_input("테스트 비디오 파일 경로 입력", "data/sample_cctv.mp4")
+# 가상의 샘플 영상 리스트 (나중에 data/ 폴더에 이 이름대로 넣으시면 됩니다)
+sample_videos = {
+    "샘플 영상 1 (정상 작업 구역)": "data/sample_cctv1.mp4",
+    "샘플 영상 2 (추락 위험 구역)": "data/sample_cctv2.mp4",
+    "샘플 영상 3 (충돌 위험 구역)": "data/sample_cctv3.mp4",
+    "샘플 영상 4 (보호구 미착용 구역)": "data/sample_cctv4.mp4",
+    "샘플 영상 5 (야간 감시 구역)": "data/sample_cctv5.mp4",
+    "샘플 영상 6 (장비 이동 구역)": "data/sample_cctv6.mp4"
+}
 
-# 감지 주기 설정 (최적화 방향성 검증용)
+# 2. 선택한 개수만큼 사이드바에 영상 소스 선택 위젯 동적 생성
+selected_sources = []
+for i in range(cctv_count):
+    st.sidebar.markdown(f"### 📺 {i+1}번 채널 설정")
+    # 각 채널마다 서로 다른 샘플을 디폴트로 지정 (1번 채널엔 1번 영상, 2번 채널엔 2번 영상...)
+    default_index = min(i, len(sample_videos) - 1)
+    
+    choice = st.sidebar.selectbox(
+        f"{i+1}번 CCTV 영상 선택", 
+        list(sample_videos.keys()), 
+        index=default_index,
+        key=f"cctv_src_{i}"
+    )
+    # 선택한 가상 파일 경로 저장
+    selected_sources.append(sample_videos[choice])
+
+# 3. 공통 감지 주기 설정
 st.sidebar.markdown("---")
 detection_fps = st.sidebar.slider("초당 AI 분석 횟수 (FPS)", min_value=1, max_value=5, value=2)
 
-# 관제 시작 버튼
+# 관제 버튼
 start_button = st.sidebar.button("▶ 관제 시작", use_container_width=True)
 stop_button = st.sidebar.button("⏹ 관제 종료", use_container_width=True)
 
-# 실시간 화면을 그려줄 껍데기(Placeholder) 생성
-frame_placeholder = st.empty()
-alert_placeholder = st.empty()
+# --- 🖥️ 메인 관제 화면 그리드(레이아웃) 생성 ---
+# 화면을 2x2 격자로 나누기 위해 empty 껍데기들을 미리 배열 형태로 셋팅합니다.
+placeholders = []
+alert_placeholders = []
 
-# 실행 로직
-if start_button:
-    cap = cv2.VideoCapture(video_path)
+if cctv_count == 1:
+    # 1대일 때는 화면 전체 활용
+    placeholders.append(st.empty())
+    alert_placeholders.append(st.empty())
+elif cctv_count == 2:
+    # 2대일 때는 가로로 2분할
+    cols = st.columns(2)
+    for col in cols:
+        placeholders.append(col.empty())
+        alert_placeholders.append(col.empty())
+else:
+    # 3~4대일 때는 2x2 격자 레이아웃
+    row1 = st.columns(2)
+    row2 = st.columns(2)
     
-    if not cap.isOpened():
-        st.error(f"영상 소스({video_path})를 열 수 없습니다. 경로를 확인해주세요.")
-    else:
-        video_fps = cap.get(cv2.CAP_PROP_FPS)
-        if video_fps == 0 or video_fps is None:
-            video_fps = 30  # 웹캠 등 FPS 측정이 안 될 경우 기본값
-            
-        # 몇 프레임마다 검증할 것인지 계산 (예: 원래 30fps / 설정 2fps = 15프레임마다)
-        skip_interval = max(1, int(video_fps / detection_fps))
-        
-        frame_count = 0
-        is_danger = False
-        danger_msg = ""
+    placeholders.append(row1[0].empty()) # 1번 자리
+    alert_placeholders.append(row1[0].empty())
+    
+    placeholders.append(row1[1].empty()) # 2번 자리
+    alert_placeholders.append(row1[1].empty())
+    
+    placeholders.append(row2[0].empty()) # 3번 자리
+    alert_placeholders.append(row2[0].empty())
+    
+    if cctv_count == 4:
+        placeholders.append(row2[1].empty()) # 4번 자리
+        alert_placeholders.append(row2[1].empty())
 
-        # 루프 시작
-        while cap.isOpened():
-            # 사용자가 종료 버튼을 누르면 루프 탈출
-            if stop_button:
-                break
-                
-            ret, frame = cap.read()
-            if not ret:
-                st.info("영상이 종료되었거나 프레임을 읽을 수 없습니다.")
-                break
-                
-            frame_count += 1
+
+# --- 🔄 실시간 다중 재생 및 판단 루프 ---
+if start_button:
+    # 선택된 대수만큼 VideoCapture 객체 생성
+    # (현재는 실제 파일이 없으므로 검은색 화면에 텍스트를 그리는 가상 캡처 시뮬레이션으로 대체합니다)
+    caps = []
+    video_fps = 30
+    skip_interval = max(1, int(video_fps / detection_fps))
+    
+    frame_count = 0
+    # 각 채널별 위험 상태를 기억할 리스트
+    danger_states = [False] * cctv_count
+    danger_messages = [""] * cctv_count
+
+    # 테스트용 가상 프레임 생성기 (실제 파일이 없을 때 에러 방지용)
+    def generate_mock_frame(channel_name, frame_num):
+        # 640x480 크기의 빈 비디오 프레임 생성
+        img = np.zeros((480, 640, 3), dtype=np.uint8) + 40 # 어두운 회색 배경
+        # 현재 채널 정보 표시
+        cv2.putText(img, f"CCTV: {channel_name}", (30, 220), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+        cv2.putText(img, f"Frame: {frame_num}", (30, 270), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (150, 150, 150), 1)
+        return img
+
+    st.toast("다중 채널 관제를 시작합니다!", icon="🚀")
+
+    # 가상 루프 실행
+    while True:
+        if stop_button:
+            break
             
-            # --- [핵심] 초당 N번만 솎아내서 판단하는 로직 ---
-            if frame_count % skip_interval == 0:
-                # 💡 [모델 완성 전 판단 단계] 15% 확률로 위험 상황 발생 모의 가상화
-                if random.random() < 0.15: 
-                    is_danger = True
-                    danger_msg = random.choice([
-                        "🚨 위험: 작업자 쓰러짐/추락 위험 감지!", 
-                        "🚨 주의: 안전모 미착용 작업자가 구역 내에 있습니다!"
+        frame_count += 1
+        
+        # 초당 N번 솎아내는 타이밍 체크
+        is_eval_timing = (frame_count % skip_interval == 0)
+        
+        # 4대의 카메라를 순차적으로 스캔
+        for idx in range(cctv_count):
+            # 1. 파일이 없을 테니 가상 프레임 가져오기 (실제 구현 시엔 cap.read()가 들어갈 자리)
+            file_name = selected_sources[idx].split("/")[-1]
+            frame = generate_mock_frame(f"Channel {idx+1} ({file_name})", frame_count)
+            
+            # 2. AI 판단 타이밍일 때 채널별로 독립적인 위험 확률 부여
+            if is_eval_timing:
+                # 10%의 확률로 무작위 위험 발생 모의
+                if random.random() < 0.10:
+                    danger_states[idx] = True
+                    danger_messages[idx] = random.choice([
+                        f"🚨 [{idx+1}번 채널] 위험구역 작업자 추락 의심!", 
+                        f"🚨 [{idx+1}번 채널] 미착용(안전모/조끼) 발견!"
                     ])
                 else:
-                    is_danger = False
+                    danger_states[idx] = False
             
-            # --- 시각화 오버레이 처리 ---
-            if is_danger:
-                # 위험할 때만 화면 테두리에 굵은 빨간색 사각형 오버레이
-                h, w, _ = frame.shape
-                cv2.rectangle(frame, (20, 20), (w-20, h-20), (0, 0, 255), 8)
-                cv2.putText(frame, "RISK DETECTED", (40, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 4)
-                
-                # 영상 바로 아래 경고창 노출
-                alert_placeholder.error(danger_msg)
+            # 3. 위험 상태인 채널에 오버레이 덮어쓰기
+            if danger_states[idx]:
+                # 화면 테두리에 굵은 빨간 사각형 오버레이
+                cv2.rectangle(frame, (10, 10), (630, 470), (0, 0, 255), 12)
+                cv2.putText(frame, "EMERGENCY", (30, 70), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
+                # 영상 밑 껍데기에 경고문구 출력
+                alert_placeholders[idx].error(danger_messages[idx])
             else:
-                alert_placeholder.empty()
+                alert_placeholders[idx].empty()
                 
-            # 화면 출력
+            # 4. 각 격자 자리에 매핑된 placeholder에 이미지 뿌리기
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame_placeholder.image(frame_rgb, channels="RGB", use_container_width=True)
+            placeholders[idx].image(frame_rgb, channels="RGB", use_container_width=True)
             
-            # 원본 영상 속도와 동기화를 위한 약간의 타임 슬립
-            time.sleep(1 / video_fps)
-            
-        cap.release()
-        frame_placeholder.empty()
-        alert_placeholder.empty()
-        st.success("CCTV 관제가 안전하게 종료되었습니다.")
+        # 프레임 간 격차 조절을 위한 미세한 딜레이 (4대 순회 연산 속도 고려)
+        time.sleep(0.03)
+
+    # 종료 후 청소
+    for p in placeholders: p.empty()
+    for a in alert_placeholders: a.empty()
+    st.success("모든 CCTV 관제가 안전하게 종료되었습니다.")
