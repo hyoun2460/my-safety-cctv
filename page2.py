@@ -5,61 +5,81 @@ import cv2
 # --- 1. 세션 상태 및 가상 데이터 초기화 ---
 if "mock_logs" not in st.session_state:
     st.session_state.mock_logs = [
-        {"id": "LOG-01", "tab": "위험", "time": "14:20:05", "channel": "CCTV 1대 (Area 1)", "desc": "작업자 추락 의심 상황 발생", "status": "Pending", "media_type": "video", "feedback": ""},
-        {"id": "LOG-02", "tab": "위험", "time": "16:42:10", "channel": "CCTV 3대 (Stacking Area)", "desc": "지게차 충돌 위험 감지", "status": "Pending", "media_type": "video", "feedback": ""},
-        {"id": "LOG-03", "tab": "경고", "time": "09:15:22", "channel": "CCTV 2대 (Safety Path)", "desc": "안전모 미착용 작업자 발견", "status": "Pending", "media_type": "image", "feedback": ""},
-        {"id": "LOG-04", "tab": "경고", "time": "11:30:12", "channel": "CCTV 4대 (Outer Fence)", "desc": "안전조끼 미착용 작업자 발견", "status": "Pending", "media_type": "image", "feedback": ""},
-        {"id": "LOG-05", "tab": "피드백", "time": "10:05:43", "channel": "CCTV 1대 (Area 1)", "desc": "미탐지 신고 접수 (추락)", "status": "Pending", "media_type": "image", "feedback": ""},
+        {"id": "LOG-01", "tab": "위험", "time": "5/28 09:15:22", "channel": "1공구", "desc": "작업자 추락 의심 상황 발생", "status": "대기중", "media_type": "video", "feedback": ""},
+        {"id": "LOG-02", "tab": "위험", "time": "5/28 16:42:10", "channel": "적재구역", "desc": "지게차 충돌 위험 감지", "status": "대기중", "media_type": "video", "feedback": ""},
+        {"id": "LOG-03", "tab": "경고", "time": "5/28 09:15:22", "channel": "안전통로", "desc": "안전모 미착용 작업자 발견", "status": "대기중", "media_type": "image", "feedback": ""},
+        {"id": "LOG-04", "tab": "경고", "time": "5/28 11:30:12", "channel": "외곽펜스", "desc": "안전조끼 미착용 작업자 발견", "status": "대기중", "media_type": "image", "feedback": ""},
+        {"id": "LOG-05", "tab": "피드백", "time": "5/28 10:05:43", "channel": "1공구", "desc": "미탐지 신고 접수 (추락)", "status": "대기중", "media_type": "image", "feedback": ""}
     ]
 
 if "selected_id_tracker" not in st.session_state:
     st.session_state.selected_id_tracker = st.session_state.mock_logs[0]["id"]
 
-# --- 2. 와이어프레임 맞춤형 CSS 주입 ---
-# [변경 포인트] 클릭 가능한 st.button 자체를 카드 형태로 스타일링하여 이중 클릭을 없앱니다.
+# --- 2. 와이어프레임 기획안 기반 CSS 테마 주입 ---
 st.markdown("""
     <style>
-    /* Streamlit 기본 버튼을 커스텀 카드 스타일로 전면 개편 */
-    div.stButton > button {
-        background-color: #1e293b !important;
-        border: 2px solid #334155 !important;
-        border-radius: 10px !important;
-        padding: 20px 15px !important;
-        margin-bottom: 0px !important;
-        color: #f1f5f9 !important;
-        text-align: left !important;
-        width: 100% !important;
-        display: block !important;
-        transition: all 0.2s ease;
-    }
-    
-    /* 마우스를 올렸을 때의 효과 */
-    div.stButton > button:hover {
-        border-color: #64748b !important;
-        background-color: #334155 !important;
-    }
-
-    /* 선택된 전용 투명 박스 레이아웃 오버레이 및 상태 관리용 */
-    .status-container {
+    /* 1. 기본 카드 레이아웃 (무채색 배경 및 격자 구조) */
+    .custom-log-card {
+        background-color: #1e293b;
+        border: 2px solid #334155;
+        border-radius: 6px;
+        padding: 12px;
+        margin-bottom: 10px;
         display: flex;
         justify-content: space-between;
-        font-size: 13px;
-        color: #94a3b8;
-        margin-bottom: 8px;
-        width: 100%;
+        align-items: center;
+        color: #f1f5f9;
     }
-    .card-title-text {
-        font-size: 16px;
+    
+    /* 2. 기획안의 핵심: 선택된 카드만 노란색 테두리 하이라이트 */
+    .custom-log-card-selected {
+        background-color: #0f172a;
+        border: 2px solid #FFD700 !important;
+        border-radius: 6px;
+        padding: 12px;
+        margin-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #ffffff;
+        box-shadow: 0px 0px 8px rgba(255, 215, 0, 0.2);
+    }
+    
+    /* 카드 내부 왼쪽 정보 텍스트 단 */
+    .card-left-info {
+        font-size: 15px;
+        font-family: monospace;
+        font-weight: 500;
+    }
+    
+    .card-desc {
+        font-size: 14px;
         font-weight: bold;
+        margin-top: 4px;
         color: #ffffff;
     }
-    .status-pending-tag {
-        color: #38bdf8;
+
+    /* 3. 기획안의 초록색 대기중 뱃지 스타일 */
+    .badge-pending {
+        border: 2px solid #22c55e !important;
+        color: #22c55e !important;
+        background-color: transparent;
+        padding: 6px 12px;
+        border-radius: 4px;
         font-weight: bold;
+        font-size: 14px;
+        white-space: nowrap;
     }
-    .status-done-tag {
-        color: #facc15;
+    
+    .badge-done {
+        border: 2px solid #94a3b8 !important;
+        color: #94a3b8 !important;
+        background-color: transparent;
+        padding: 6px 12px;
+        border-radius: 4px;
         font-weight: bold;
+        font-size: 14px;
+        white-space: nowrap;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -69,63 +89,60 @@ st.title("📈 위험/경고 로그 및 모델 피드백 관제소")
 # --- 🖥️ 2분할 레이아웃 (좌: 45% / 우: 55%) ---
 col_left, col_right = st.columns([45, 55])
 
-# ⬅ silence [좌측 구역]
+# ⬅️ [좌측 구역] 로그 목록 및 필터 스위치
 with col_left:
     st.subheader("📋 관제 로그 목록 (List view)")
     
+    # 위험, 경고, 피드백 상단 탭
     tab_danger, tab_warn, tab_feedback = st.tabs(["🚨 위험 (Danger)", "⚠️ 경고 (Warning)", "🔍 피드백 (Feedback)"])
+    
+    # 기획안 최상단에 위치한 숨김 체크박스 구현
+    hide_completed = st.checkbox("⬛ 피드백 완료된 로그 숨기기", value=False)
     
     cctv_dropdown = st.selectbox(
         "📅 필터링 / 채널 선택",
-        ["전체 채널 보기", "CCTV 1대 (Area 1)", "CCTV 2대 (Safety Path)", "CCTV 3대 (Stacking Area)", "CCTV 4대 (Outer Fence)"]
+        ["전체 채널 보기", "1공구", "Safety Path", "적재구역", "외곽펜스"]
     )
     
     st.markdown("---")
     
     def render_log_cards(target_tab_name):
+        # 1. 탭 및 채널 필터링 적용
         if cctv_dropdown == "전체 채널 보기":
             filtered_logs = [log for log in st.session_state.mock_logs if log["tab"] == target_tab_name]
         else:
             filtered_logs = [log for log in st.session_state.mock_logs if log["tab"] == target_tab_name and cctv_dropdown in log['channel']]
         
+        # 2. 피드백 완료 숨기기 체크박스 활성화 시 필터링
+        if hide_completed:
+            filtered_logs = [log for log in filtered_logs if log["status"] == "대기중"]
+            
         if not filtered_logs:
-            st.info("이 카테고리/채널에 대기 중인 로그가 없습니다.")
+            st.info("이 카테고리/채널에 표시할 로그가 없습니다.")
             return
 
         for log in filtered_logs:
             is_selected = (log["id"] == st.session_state.selected_id_tracker)
+            card_class = "custom-log-card-selected" if is_selected else "custom-log-card"
+            badge_class = "badge-pending" if log["status"] == "대기중" else "badge-done"
             
-            # 💡 [핵심 구현] 만약 현재 선택된 로그라면, Streamlit 컴포넌트 ID를 추적하여 
-            # 해당 버튼 테두리만 와이어프레임처럼 노란색으로 강제 주입합니다.
-            if is_selected:
-                st.markdown(f"""
-                    <style>
-                    div.stButton > button[key*="{log['id']}"] {{
-                        border: 2px solid #FFD700 !important;
-                        background-color: #0f172a !important;
-                        box-shadow: 0px 0px 10px rgba(255, 215, 0, 0.3);
-                    }}
-                    </style>
-                """, unsafe_allow_html=True)
-            
-            # 카드 내부 레이아웃 정의
-            status_tag_html = f'<span class="status-done-tag">[{log["status"]}]</span>' if log["status"] != "Pending" else f'<span class="status-pending-tag">[{log["status"]}]</span>'
-            
-            card_content = f"""
-                <div class="status-container">
-                    <span>🕒 {log['time']} | {log['channel']}</span>
-                    {status_tag_html}
+            # 💡 [핵심 교정] 카드 내부에 HTML 양식으로 시간, 채널, 설명, 대기중 뱃지를 완벽하게 보존
+            st.markdown(f"""
+                <div class="{card_class}">
+                    <div class="card-left-info">
+                        <div>🕒 {log['time']} | {log['channel']}</div>
+                        <div class="card-desc">{log['desc']}</div>
+                    </div>
+                    <div class="{badge_class}">
+                        {log['status']}
+                    </div>
                 </div>
-                <div class="card-title-text">{log['desc']}</div>
-            """
+            """, unsafe_allow_html=True)
             
-            # 개별 카드 자체를 하나의 버튼으로 생성하여 버튼 없이 다이렉트로 클릭 이벤트를 받습니다.
-            if st.button(log['id'], key=f"card_btn_{log['id']}", use_container_width=True):
+            # 투명 버튼을 카드 밑에 투과시켜 사각형 영역 어디를 눌러도 클릭 이벤트가 잡히도록 설계
+            if st.button(f"선택: {log['id']}", key=f"click_trigger_{log['id']}", use_container_width=True):
                 st.session_state.selected_id_tracker = log["id"]
                 st.rerun()
-                
-            # 버튼 바로 아래에 스타일 보정용 마진 추가
-            st.markdown('<div style="margin-bottom: 12px;"></div>', unsafe_allow_html=True)
 
     with tab_danger:
         render_log_cards("위험")
@@ -134,7 +151,7 @@ with col_left:
     with tab_feedback:
         render_log_cards("피드백")
 
-# ➡️ [우측 구역]
+# ➡️ [우측 구역] 미디어 분석 및 피드백 (와이어프레임 우측 구조 100% 매칭)
 with col_right:
     st.subheader("🔍 실시간 로그 데이터 검증")
     
@@ -143,40 +160,57 @@ with col_right:
     if current_log:
         st.info(f"📄 파일 코드: **{current_log['id']}** | 위치: **{current_log['channel']}**")
         
+        # 1. 플레이어 영역
         if current_log["media_type"] == "video":
-            st.markdown("#### 📹 사고 녹화 영상 플레이어")
-            img = np.zeros((360, 640, 3), dtype=np.uint8) + 50
-            cv2.rectangle(img, (10, 10), (630, 350), (0, 0, 255), 6)
-            cv2.putText(img, f"▶ CCTV VIDEO ({current_log['id']})", (50, 160), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+            st.markdown("#### 📹 플레이어 (영상 시뮬레이션)")
+            img = np.zeros((360, 640, 3), dtype=np.uint8) + 40
+            cv2.rectangle(img, (10, 10), (630, 350), (0, 0, 255), 5)
+            cv2.putText(img, f"CCTV VIDEO: {current_log['desc']}", (40, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), use_container_width=True)
         else:
-            st.markdown("#### 📸 알림 스냅샷 이미지")
-            img = np.zeros((360, 640, 3), dtype=np.uint8) + 70
-            cv2.rectangle(img, (10, 10), (630, 350), (0, 255, 255), 6)
-            cv2.putText(img, f"📸 CCTV IMAGE ({current_log['id']})", (50, 180), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+            st.markdown("#### 📸 플레이어 (스냅샷 시뮬레이션)")
+            img = np.zeros((360, 640, 3), dtype=np.uint8) + 60
+            cv2.rectangle(img, (10, 10), (630, 350), (0, 255, 255), 5)
+            cv2.putText(img, f"CCTV IMAGE: {current_log['desc']}", (40, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), use_container_width=True)
             
         st.markdown("---")
+        
+        # 2. 세부 데이터 요약 영역
+        st.markdown("#### 📊 세부 데이터 요약")
+        metadata = {
+            "발생 시각": current_log['time'],
+            "검출 구역": current_log['channel'],
+            "AI 탐지 내용": current_log['desc'],
+            "현재 상태": current_log['status']
+        }
+        st.json(metadata)
+        
+        st.markdown("---")
+        
+        # 3. 정탐 / 오탐 / 공유 가로 버튼 및 메모, 저장단 구조
         st.markdown("#### ✍️ 탐지 결과 판정 및 피드백")
         
         btn_col1, btn_col2, btn_col3 = st.columns(3)
-        if btn_col1.button("🎯 정탐 (True Pos.)", use_container_width=True, key=f"tp_{current_log['id']}"):
-            current_log["status"] = "True Pos."
+        if btn_col1.button("🎯 정탐", use_container_width=True, key=f"tp_{current_log['id']}"):
+            current_log["status"] = "정탐"
             st.rerun()
-        if btn_col2.button("❌ 오탐 (False Pos.)", use_container_width=True, key=f"fp_{current_log['id']}"):
-            current_log["status"] = "False Pos."
+        if btn_col2.button("❌ 오탐", use_container_width=True, key=f"fp_{current_log['id']}"):
+            current_log["status"] = "오탐"
             st.rerun()
-        if btn_col3.button("📤 현장 공유", use_container_width=True, key=f"share_{current_log['id']}"):
-            st.toast("현장 안전 관리자 앱으로 데이터를 전송했습니다.")
+        if btn_col3.button("📤 공유", use_container_width=True, key=f"share_{current_log['id']}"):
+            st.toast(f"🚨 {current_log['id']} 관제 데이터가 현장 관리 본부로 공유되었습니다.")
             
+        # 메모 입력창
         feedback_input = st.text_input(
-            "피드백 간단하게 한 줄 메모", 
+            "📝 메모", 
             value=current_log["feedback"],
-            placeholder="예: 오인식 사유 / 실제 낙상 사고 매칭 완료.",
+            placeholder="모델 오인식 사유나 현장 특이사항을 입력하세요.",
             key=f"input_{current_log['id']}"
         )
         
-        if st.button("💾 피드백 및 판정 저장", type="primary", use_container_width=True, key=f"save_{current_log['id']}"):
+        # 최종 저장 버튼
+        if st.button("💾 저장", type="primary", use_container_width=True, key=f"save_{current_log['id']}"):
             current_log["feedback"] = feedback_input
             import feedback_manager
             feedback_manager.save_user_feedback(
@@ -186,5 +220,5 @@ with col_right:
                 status=current_log['status'],
                 feedback_text=feedback_input
             )
-            st.toast("가상 DB(CSV)에 피드백이 영구 기록되었습니다!", icon="💾")
+            st.toast("피드백이 백엔드 파이프라인에 영구 기록되었습니다!", icon="💾")
             st.rerun()
