@@ -15,39 +15,34 @@ if "mock_logs" not in st.session_state:
 if "selected_id_tracker" not in st.session_state:
     st.session_state.selected_id_tracker = st.session_state.mock_logs[0]["id"]
 
-# --- 2. 카드 및 하이라이트 스타일 전용 CSS 주입 ---
+# --- 2. 와이어프레임 밀착 매칭용 고급 CSS 주입 ---
 st.markdown("""
     <style>
-    /* 카드가 감싸고 있는 뼈대 스타일 보정 */
-    [data-testid="stExpander"] {
-        border: none !important;
-        background: transparent !important;
-        box-shadow: none !important;
-    }
-    
-    /* 선택되지 않은 일반 카드 컨테이너 */
+    /* 1. 정보 카드 기본 박스 (와이어프레임의 무채색 사각형 구현) */
     .log-card-box {
         background-color: #1e293b;
         border: 2px solid #334155;
         border-radius: 6px;
-        padding: 12px 16px;
+        padding: 14px 16px;
         color: #f1f5f9;
+        position: relative;
     }
     
-    /* 와이어프레임 핵심: 선택된 카드의 노란색 테두리 하이라이트 */
+    /* 2. 기획안 핵심: 선택된 카드의 굵은 노란색 테두리 하이라이트 */
     .log-card-box-selected {
         background-color: #0f172a;
         border: 2px solid #FFD700 !important;
         border-radius: 6px;
-        padding: 12px 16px;
+        padding: 14px 16px;
         color: #ffffff;
         box-shadow: 0px 0px 10px rgba(255, 215, 0, 0.2);
+        position: relative;
     }
     
     .card-meta-line {
         font-size: 13px;
         color: #94a3b8;
-        margin-bottom: 4px;
+        margin-bottom: 6px;
     }
     
     .card-title-line {
@@ -55,11 +50,11 @@ st.markdown("""
         font-weight: bold;
     }
     
-    /* 대기중 초록색 테두리 뱃지 스타일 */
+    /* 3. 와이어프레임과 완벽히 매칭되는 우측 초록색 [대기중] 뱃지 */
     .green-status-badge {
         border: 2px solid #22c55e;
         color: #22c55e;
-        padding: 4px 10px;
+        padding: 5px 12px;
         border-radius: 4px;
         font-weight: bold;
         font-size: 13px;
@@ -70,17 +65,30 @@ st.markdown("""
     .gray-status-badge {
         border: 2px solid #94a3b8;
         color: #94a3b8;
-        padding: 4px 10px;
+        padding: 5px 12px;
         border-radius: 4px;
         font-weight: bold;
         font-size: 13px;
         text-align: center;
         display: inline-block;
     }
+
+    /* 4. [핵심] 하단 트리거 버튼을 텍스트 없이 깔끔하게 투명 탭화하여 줄바꿈 원천 해결 */
+    div.stButton > button[key^="trigger_"] {
+        border: 1px solid #334155 !important;
+        background-color: #1e293b !important;
+        color: #94a3b8 !important;
+        font-size: 12px !important;
+        padding: 4px 10px !important;
+        margin-top: -4px !important;
+        border-radius: 0px 0px 6px 6px !important;
+        text-align: center !important;
+        width: 100% !important;
+    }
     
-    /* 기본 스트림릿 라디오/체크박스 패딩 보정 */
-    div[data-testid="stHorizontalBlock"] {
-        align-items: center !important;
+    div.stButton > button[key^="trigger_"]:hover {
+        background-color: #334155 !important;
+        color: #ffffff !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -94,16 +102,17 @@ col_left, col_right = st.columns([45, 55])
 with col_left:
     st.subheader("📋 관제 로그 목록 (List view)")
     
-    tab_danger, tab_warn, tab_feedback = st.tabs(["🚨 위험 (Danger)", "⚠️ 경고 (Warning)", "🔍 피드백 (Feedback)"])
-    
-    hide_completed = st.checkbox("⬛ 피드백 완료된 로그 숨기기", value=False)
-    
+    # 💡 [개편 포인트 1] 필터링 드롭다운과 체크박스를 최상단으로 끌어올려 시야 확보
     cctv_dropdown = st.selectbox(
         "📅 필터링 / 채널 선택",
         ["전체 채널 보기", "CCTV 1대 (1공구)", "CCTV 2대 (안전통로)", "CCTV 3대 (적재구역)", "CCTV 4대 (외곽펜스)"]
     )
     
+    hide_completed = st.checkbox("⬛ 피드백 완료된 로그 숨기기", value=False)
     st.markdown("---")
+    
+    # 카테고리 탭 배치
+    tab_danger, tab_warn, tab_feedback = st.tabs(["🚨 위험 (Danger)", "⚠️ 경고 (Warning)", "🔍 피드백 (Feedback)"])
     
     def render_log_cards(target_tab_name):
         if cctv_dropdown == "전체 채널 보기":
@@ -123,8 +132,7 @@ with col_left:
             box_style = "log-card-box-selected" if is_selected else "log-card-box"
             badge_style = "green-status-badge" if log["status"] == "대기중" else "gray-status-badge"
             
-            # 💡 [해결 포인트] 쌩 버튼 대신, 상단에는 정보를 HTML로 완벽히 렌더링하고
-            # 바로 하단에 카드 너비와 똑같은 가로형 '선택 버튼'을 밀착 배치하여 에러를 완전히 차단합니다.
+            # 상단 카드 본체 렌더링 (와이어프레임 완벽 매칭)
             st.markdown(f"""
                 <div class="{box_style}">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -139,12 +147,12 @@ with col_left:
                 </div>
             """, unsafe_allow_html=True)
             
-            # 카드의 ID를 투명하게 품은 콤팩트한 선택 트리거 버튼
-            if st.button(f"👆 {log['id']} 상시 검증 및 분석 활성화", key=f"trigger_{log['id']}", use_container_width=True):
+            # 💡 [개편 포인트 2] 지저분하게 줄바꿈되던 버튼 명칭을 지우고 깔끔한 컴팩트 하단 탭 버튼으로 변경
+            if st.button(f"🔍 {log['id']} 선택 및 데이터 분석", key=f"trigger_{log['id']}", use_container_width=True):
                 st.session_state.selected_id_tracker = log["id"]
                 st.rerun()
                 
-            st.markdown('<div style="margin-bottom: 5px;"></div>', unsafe_allow_html=True)
+            st.markdown('<div style="margin-bottom: 12px;"></div>', unsafe_allow_html=True)
 
     with tab_danger:
         render_log_cards("위험")
@@ -153,7 +161,7 @@ with col_left:
     with tab_feedback:
         render_log_cards("피드백")
 
-# ➡️ [우측 구역] 미디어 분석 및 피드백 (와이어프레임 100% 동기화 구역)
+# ➡️ [우측 구역] 미디어 분석 및 피드백 
 with col_right:
     st.subheader("🔍 실시간 로그 데이터 검증")
     
@@ -162,7 +170,6 @@ with col_right:
     if current_log:
         st.info(f"📄 파일 코드: **{current_log['id']}** | 위치: **{current_log['channel']}**")
         
-        # 1. 플레이어 영역
         if current_log["media_type"] == "video":
             st.markdown("#### 📹 플레이어 (영상 시뮬레이션)")
             img = np.zeros((360, 640, 3), dtype=np.uint8) + 40
@@ -178,7 +185,6 @@ with col_right:
             
         st.markdown("---")
         
-        # 2. 세부 데이터 요약 영역
         st.markdown("#### 📊 세부 데이터 요약")
         metadata = {
             "발생 시각": current_log['time'],
@@ -190,7 +196,6 @@ with col_right:
         
         st.markdown("---")
         
-        # 3. 판정 버튼 및 한 줄 메모 구역
         st.markdown("#### ✍️ 탐지 결과 판정 및 피드백")
         
         btn_col1, btn_col2, btn_col3 = st.columns(3)
