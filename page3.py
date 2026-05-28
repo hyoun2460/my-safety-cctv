@@ -2,110 +2,138 @@ import streamlit as st
 import time
 import numpy as np
 import cv2
+from PIL import Image
 
 st.title("🔄 신규 클래스 확장 및 오토 라벨링 시스템")
-st.markdown("기존 모델에 없던 새 객체(예: 안전조끼)를 추가하기 위해, CCTV 아카이브 데이터와 특징 이미지를 활용해 자동 정답지(Label)를 생성합니다.")
 
-# 🛠️ 3단계 파이프라인 레이아웃 구성
+# --- 세션 상태 초기화 ---
+if "reference_images" not in st.session_state:
+    # 기본 데모용 레퍼런스 이미지 리스트 (이름, 샘플색상)
+    st.session_state.reference_images = [
+        {"name": "helmet", "color": (0, 255, 255)}, # 노란색 안전모 대용
+        {"name": "person", "color": (255, 0, 0)}    # 파란색 사람 대용
+    ]
+if "pipeline_running" not in st.session_state:
+    st.session_state.pipeline_running = False
+if "auto_label_done" not in st.session_state:
+    st.session_state.auto_label_done = False
+
+# --- STEP 1: 데이터 소스 및 클래스 정의 ---
 st.markdown("---")
-st.subheader("🛠️ STEP 1: 신규 클래스 정의 및 특징 이미지 지정")
+st.subheader("🛠️ STEP 1: 데이터 소스 정의 및 신규 클래스 지정")
+
+# 1. 데이터 소스 선택 (CCTV 스캔 vs 외부 데이터셋) - 회원님 아이디어 반영
+data_source = st.radio(
+    "데이터 확보 방식을 선택하세요",
+    ["📡 CCTV 아카이브 스캔 (오토라벨링 필요)", "📂 이미 라벨링된 외부 데이터셋 직접 업로드 (CCTV 스캔 패스)"],
+    disabled=st.session_state.pipeline_running # 작업 중이면 잠금
+)
 
 col1, col2 = st.columns(2)
 
 with col1:
-    # 1. 추가할 클래스명 입력
-    new_class_name = st.text_input("1. 추가할 클래스 이름 입력 (영문)", value="safety_vest", placeholder="예: safety_vest, gas_mask")
-    
-    # 2. CCTV 데이터 아카이브 선택 (회원님 아이디어 반영: 1주치 데이터 존재 명시)
-    cctv_archive = st.selectbox(
-        "2. 오토 라벨링을 진행할 CCTV 저장고 선택",
-        ["최근 1주일 데이터 (2026-05-22 ~ 2026-05-28) 💾", "특정 날짜 구역 지정", "직접 원본 영상 업로드"]
+    new_class_name = st.text_input(
+        "추가할 클래스 이름 (영문)", 
+        value="safety_vest", 
+        disabled=st.session_state.pipeline_running
     )
+    
+    # CCTV 스캔을 선택했을 때만 아카이브 선택창 활성화
+    if "CCTV 아카이브" in data_source:
+        cctv_archive = st.selectbox(
+            "오토 라벨링을 진행할 CCTV 저장고",
+            ["최근 1주일 데이터 (2026-05-22 ~ 2026-05-28) 💾", "특정 채널 지정"],
+            disabled=st.session_state.pipeline_running
+        )
+    else:
+        st.caption("💡 외부 데이터셋을 업로드하므로 CCTV 아카이브를 참조하지 않습니다.")
 
 with col2:
-    # 3. 타겟 특징 이미지 업로드 기획 (회원님 아이디어 반영!)
-    st.markdown("**3. 오토 라벨링 가이드용 특징 이미지 업로드**")
-    st.caption("AI가 1주치 데이터에서 타겟을 정확히 식별할 수 있도록, 해당 물체(예: 조끼)의 크롭 이미지 1장을 등록해주세요.")
-    
-    uploaded_feature_img = st.file_uploader("특징 스냅샷 이미지 업로드 (.jpg, .png)", type=["jpg", "png"])
-
-st.markdown("---")
-
-# 🔄 STEP 2: 오토 라벨링 시뮬레이션 구역
-st.subheader("🤖 STEP 2: 기존 모델(YOLO/Pose) 기반 오토 라벨링 가동")
-
-if uploaded_feature_img is not None:
-    st.success(f"✅ 타겟 이미지 접수 완료! [{new_class_name}] 스캔 알고리즘이 준비되었습니다.")
-    
-    # 시연을 위한 가동 버튼
-    if st.button("🚀 1주일치 CCTV 데이터 오토 라벨링 시작", type="primary", use_container_width=True):
+    if "CCTV 아카이브" in data_source:
+        st.markdown("**오토 라벨링 가이드용 특징 이미지 업로드**")
+        uploaded_feature_img = st.file_uploader(
+            "특징 스냅샷 (.jpg, .png)", 
+            type=["jpg", "png"],
+            disabled=st.session_state.pipeline_running
+        )
         
-        # 프로그레스 바와 로그 출력을 위한 플레이스홀더
+        # 이미지를 올리면 실시간으로 하단 레퍼런스 세션에 추가하는 로직
+        if uploaded_feature_img and not st.session_state.pipeline_running:
+            # 중복 추가 방지
+            if not any(img["name"] == new_class_name for img in st.session_state.reference_images):
+                st.session_state.reference_images.append({"name": new_class_name, "color": (0, 255, 0)})
+                st.toast(f"✅ 레퍼런스 목록에 [{new_class_name}] 타겟 이미지가 등록되었습니다!")
+    else:
+        st.markdown("**자체 데이터셋 파일 업로드**")
+        uploaded_zip = st.file_uploader(
+            "YOLO 포맷 데이터셋 업로드 (.zip)", 
+            type=["zip"],
+            disabled=st.session_state.pipeline_running
+        )
+
+# --- 등록된 타겟 이미지 레퍼런스 그리드 (실시간 반영 구역) ---
+st.markdown("#### 🎯 현재 등록된 타겟 이미지 레퍼런스")
+ref_cols = st.columns(5)
+for idx, ref in enumerate(st.session_state.reference_images):
+    with ref_cols[idx % 5]:
+        # 가상 이미지 블록 그리기
+        img_box = np.zeros((80, 100, 3), dtype=np.uint8)
+        cv2.putText(img_box, "IMG", (30, 45), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 100), 1)
+        cv2.rectangle(img_box, (5, 5), (95, 75), ref["color"], 3) # 클래스별 고유 색상 테두리
+        st.image(img_box, use_container_width=True)
+        st.caption(f"🏷️ {ref['name']}")
+
+# --- STEP 2: 파이프라인 제어 및 제어 락(Lock) ---
+st.markdown("---")
+st.subheader("🤖 STEP 2: 파이프라인 구동 제어")
+
+if "CCTV 아카이브" in data_source:
+    # CCTV 모드일 때 구동 제어
+    if not st.session_state.pipeline_running:
+        if st.button("🚀 오토 라벨링 파이프라인 시작", type="primary", use_container_width=True):
+            st.session_state.pipeline_running = True
+            st.rerun()
+    else:
+        st.warning("⚠️ 현재 오토 라벨링 작업이 백엔드에서 단독 구동 중입니다. 데이터 오염을 막기 위해 입력창이 잠금(Lock)되었습니다.")
+        if st.button("🛑 작업 중단 및 입력창 잠금 해제", type="secondary", use_container_width=True):
+            st.session_state.pipeline_running = False
+            st.rerun()
+            
+        # 가상 게이지 및 로그 연출
         progress_bar = st.progress(0)
         status_text = st.empty()
-        log_box = st.empty()
-        
-        # 가상 오토 라벨링 로그 생성
-        mock_logs = [
-            f"[INFO] {cctv_archive} 스캔 시작...",
-            "[Model] Human Pose Estimation 가동: 영상 내 'Person' 객체 추출 중...",
-            f"[Match] 업로드된 특징 이미지와 사람 상체(Upper Body) 유사도 대조 시작...",
-            "[Success] 1일차 데이터 완료: safety_vest 라벨 142개 생성 완료.",
-            "[Success] 3일차 데이터 완료: safety_vest 라벨 310개 생성 완료.",
-            "[Success] 5일차 데이터 완료: safety_vest 라벨 185개 생성 완료.",
-            "[Success] 7일차 데이터 완료: 총 892개의 새로운 데이터셋 정답지(.txt) 구축 성공!"
-        ]
-        
-        # 가상 진행 루프
-        for percent_complete in range(100):
-            time.sleep(0.03) # 속도 조절
-            progress_bar.progress(percent_complete + 1)
-            status_text.text(f"⏳ CCTV 프레임 분석 및 라벨 매칭 중... ({percent_complete + 1}%)")
-            
-            # 진행도에 따라 로그를 동적으로 노출
-            if percent_complete == 10:
-                log_box.code(mock_logs[0] + "\n" + mock_logs[1])
-            elif percent_complete == 40:
-                log_box.code("\n".join(mock_logs[:4]))
-            elif percent_complete == 70:
-                log_box.code("\n".join(mock_logs[:5]))
-                
-        status_text.text("✅ 오토 라벨링 완료!")
-        log_box.code("\n".join(mock_logs))
+        for i in range(100):
+            time.sleep(0.02)
+            progress_bar.progress(i + 1)
+            status_text.text(f"⏳ CCTV 프레임 분석 및 유사도 매칭 중... ({i+1}%)")
+        status_text.text("✅ 1주일치 CCTV 오토 라벨링 정답지 빌드 완료!")
+        st.session_state.pipeline_running = False
         st.session_state.auto_label_done = True
+        st.rerun()
+else:
+    # 외부 데이터셋 직접 업로드 모드일 때
+    if uploaded_zip:
+        st.success("📂 외부 데이터셋 압축 파일이 정상적으로 인식되었습니다.")
+        if st.button("📦 데이터셋 무결성 검사 및 로드", type="primary", use_container_width=True):
+            with st.spinner("데이터셋 압축 해제 및 .yaml 구조 파싱 중..."):
+                time.sleep(1.5)
+            st.success("✅ 검사 완료! 기존 모델과 충돌 없는 완벽한 구조입니다.")
+            st.session_state.auto_label_done = True
 
+# --- STEP 3: 최종 패키징 ---
 st.markdown("---")
+st.subheader("📦 STEP 3: 재학습 데이터셋 패키징")
 
-# 📦 STEP 3: 모델 병합 및 패키징 구역
-st.subheader("📦 STEP 3: 기존 모델 v2.0과 데이터셋 병합 및 추출")
-
-if st.session_state.get("auto_label_done", False):
-    st.info(f"기존 클래스(안전모, 사람) 데이터셋과 신규 오토 라벨링된 [{new_class_name}] 데이터셋의 구조적 병합이 완료되었습니다.")
-    
-    # 재학습 전략 선택 위젯
-    merge_strategy = st.radio(
-        "개인 VS Code(GPU 환경)로 가져갈 재학습 훈련 전략 선택",
-        [
-            "🔄 전체 데이터셋 통합 후 전면 재학습 (Full Retrain) - 권장",
-            "🎯 기존 가중치 고정 후 마지막 레이어만 확장 (Fine-tuning)"
-        ]
-    )
-    
-    # 최종 다운로드/패키징 버튼
-    if st.button("💾 VS Code 이사용 dataset.yaml 및 데이터셋 패키징", use_container_width=True):
-        st.toast("📌 dataset.yaml 및 라벨 파일 묶음 패키징 완료! 내 컴퓨터에서 바로 학습을 재개할 수 있습니다.", icon="✅")
-        
-        # 가상 구조도 표출
-        st.markdown("#### 📂 생성된 이사 전용 데이터셋 폴더 구조 예시")
+if st.session_state.auto_label_done:
+    st.info(f"기존 지식과 신규 [{new_class_name}] 마이그레이션이 완료되었습니다. 내 컴퓨터(VS Code)로 이사할 준비가 되었습니다.")
+    if st.button("💾 VS Code 전용 dataset.yaml 및 데이터셋 추출", use_container_width=True):
+        st.toast("패키징 다운로드 준비 완료!", icon="✅")
         st.code(f"""
-my-safety-dataset/
-├── dataset.yaml       # 클래스 정의 (0: person, 1: helmet, 2: {new_class_name})
-├── train/
-│   ├── images/        # 기존 이미지 + 1주치 골라낸 이미지
-│   └── labels/        # 기존 라벨 + 새로 생성된 오토 라벨 (.txt)
-└── val/
-    ├── images/
-    └── labels/
+# 구조가 자동으로 병합된 dataset.yaml 예시
+names:
+  0: person
+  1: helmet
+  2: {new_class_name}   # 자동으로 추가된 새 도메인 클래스!
         """)
 else:
-    st.caption("💡 STEP 1에서 특징 이미지를 업로드하고 STEP 2의 오토 라벨링을 실행하면 데이터셋 병합 및 패키징 메뉴가 활성화됩니다.")
+    st.caption("💡 STEP 2 작업을 완료하면 최종 패키징 및 다운로드 메뉴가 활성화됩니다.")
