@@ -46,15 +46,25 @@ with col_left:
     st.subheader("📋 관제 로그 카테고리")
     
     # 중복 위젯 에러를 막기 위해 상단 탭에서 카테고리 선택 후, 라디오 버튼은 '단 하나'만 렌더링되게 변경
+    # --- page2.py 수정 예시 ---
     categories = ["🚨 위험 로그 (사고)", "⚠️ 경고 로그 (미착용)", "🔍 미탐지 피드백"]
     selected_tab = st.radio("검토할 카테고리를 선택하세요", categories, horizontal=True, key="main_category_tab")
     
+    # 💡 [추가] 사이드바 또는 상단에 숨김 토글 스위치 배치
+    hide_completed = st.checkbox("✅ 피드백 완료된 로그 숨기기", value=False)
+    
     st.markdown("---")
     
-    # 선택된 카테고리에 맞는 데이터 리스트 가져오기
-    log_list = st.session_state.mock_logs[selected_tab]
+    # 기본 데이터 리스트 가져오기
+    raw_log_list = st.session_state.mock_logs[selected_tab]
     
-    # 목록 띄우기
+    # 💡 [핵심] 사용자가 체크박스를 켰다면 '대기 중'인 것만 솎아내고, 껐다면 전체를 보여줌
+    if hide_completed:
+        log_list = [log for log in raw_log_list if log['status'] == "대기 중"]
+    else:
+        log_list = raw_log_list
+        
+    # 이후 목록 띄우는 코드는 기존과 동일하게 흘러감...
     log_options = [f"[{log['status']}] {log['time']} | {log['channel']} - {log['type']}" for log in log_list]
     
     selected_log = None
@@ -92,9 +102,21 @@ with col_left:
             key=f"text_fb_{selected_log['id']}" # 각 로그별 고유 키 매핑으로 충돌 방지
         )
         
+        # --- page2.py 내의 기존 버튼 코드 수정 ---
         if st.button("💾 피드백 저장", type="primary", use_container_width=True, key=f"btn_save_{selected_log['id']}"):
             selected_log['feedback'] = feedback_text
-            st.toast("피드백 데이터가 저장되었습니다!", icon="✅")
+            
+            # 💡 [여기서 백엔드 파일의 함수를 호출!]
+            import feedback_manager
+            feedback_manager.save_user_feedback(
+                log_id=selected_log['id'],
+                channel=selected_log['channel'],
+                event_type=selected_log['type'],
+                status=selected_log['status'],
+                feedback_text=feedback_text
+            )
+            
+            st.toast("피드백 데이터가 백엔드 CSV 파일에 안전하게 기록되었습니다!", icon="✅")
             st.rerun()
 
 
