@@ -15,88 +15,86 @@ if "mock_logs" not in st.session_state:
 if "selected_id_tracker" not in st.session_state:
     st.session_state.selected_id_tracker = st.session_state.mock_logs[0]["id"]
 
-# --- 2. 와이어프레임 기획안 기반 CSS 테마 주입 ---
+# --- 2. Streamlit 버튼 자체를 카드로 개조하는 CSS 주입 ---
+# 흰색 버튼이 따로 튀어나오는 현상을 원천적으로 막기 위해 버튼 자체의 레이아웃을 바꿉니다.
 st.markdown("""
     <style>
-    /* 1. 기본 카드 레이아웃 (무채색 배경 및 격자 구조) */
-    .custom-log-card {
-        background-color: #1e293b;
-        border: 2px solid #334155;
-        border-radius: 6px;
-        padding: 12px;
-        margin-bottom: 10px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        color: #f1f5f9;
+    /* 1. 기본 로그 카드 스타일 (Streamlit 버튼을 전면 개조) */
+    div.stButton > button[key^="card_"] {
+        background-color: #1e293b !important;
+        border: 2px solid #334155 !important;
+        border-radius: 6px !important;
+        padding: 15px 20px !important;
+        color: #f1f5f9 !important;
+        text-align: left !important;
+        width: 100% !important;
+        display: block !important;
+        box-shadow: none !important;
+        transition: all 0.15s ease-in-out;
     }
     
-    /* 2. 기획안의 핵심: 선택된 카드만 노란색 테두리 하이라이트 */
-    .custom-log-card-selected {
-        background-color: #0f172a;
-        border: 2px solid #FFD700 !important;
-        border-radius: 6px;
-        padding: 12px;
-        margin-bottom: 10px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        color: #ffffff;
-        box-shadow: 0px 0px 8px rgba(255, 215, 0, 0.2);
-    }
-    
-    /* 카드 내부 왼쪽 정보 텍스트 단 */
-    .card-left-info {
-        font-size: 15px;
-        font-family: monospace;
-        font-weight: 500;
-    }
-    
-    .card-desc {
-        font-size: 14px;
-        font-weight: bold;
-        margin-top: 4px;
-        color: #ffffff;
+    /* 마우스 호버 효과 */
+    div.stButton > button[key^="card_"]:hover {
+        border-color: #475569 !important;
+        background-color: #334155 !important;
     }
 
-    /* 3. 기획안의 초록색 대기중 뱃지 스타일 */
-    .badge-pending {
+    /* 2. 와이어프레임 핵심: 선택된 카드의 노란색 테두리 강제 바인딩 */
+    div.stButton > button[key^="card_"].selected-active {
+        background-color: #0f172a !important;
+        border: 2px solid #FFD700 !important;
+        color: #ffffff !important;
+        box-shadow: 0px 0px 10px rgba(255, 215, 0, 0.2) !important;
+    }
+
+    /* 카드 내부에 배치될 텍스트 및 뱃지 레이아웃 */
+    .card-flex {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        pointer-events: none; /* 클릭 이벤트 방해 금지 */
+    }
+    .card-meta {
+        font-size: 14px;
+        color: #94a3b8;
+    }
+    .card-main-title {
+        font-size: 15px;
+        font-weight: bold;
+        margin-top: 6px;
+        color: #ffffff;
+    }
+    .status-badge-green {
         border: 2px solid #22c55e !important;
         color: #22c55e !important;
-        background-color: transparent;
-        padding: 6px 12px;
+        padding: 4px 10px;
         border-radius: 4px;
         font-weight: bold;
-        font-size: 14px;
-        white-space: nowrap;
+        font-size: 13px;
     }
-    
-    .badge-done {
+    .status-badge-gray {
         border: 2px solid #94a3b8 !important;
         color: #94a3b8 !important;
-        background-color: transparent;
-        padding: 6px 12px;
+        padding: 4px 10px;
         border-radius: 4px;
         font-weight: bold;
-        font-size: 14px;
-        white-space: nowrap;
+        font-size: 13px;
     }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("📈 위험/경고 로그 및 모델 피드백 관제소")
 
-# --- 🖥️ 2분할 레이아웃 (좌: 45% / 우: 55%) ---
+# --- 🖥️ 와이어프레임 구조의 2분할 레이아웃 (좌: 45% / 우: 55%) ---
 col_left, col_right = st.columns([45, 55])
 
-# ⬅️ [좌측 구역] 로그 목록 및 필터 스위치
+# ⬅️ [좌측 구역] 관제 로그 목록
 with col_left:
     st.subheader("📋 관제 로그 목록 (List view)")
     
-    # 위험, 경고, 피드백 상단 탭
     tab_danger, tab_warn, tab_feedback = st.tabs(["🚨 위험 (Danger)", "⚠️ 경고 (Warning)", "🔍 피드백 (Feedback)"])
     
-    # 기획안 최상단에 위치한 숨김 체크박스 구현
     hide_completed = st.checkbox("⬛ 피드백 완료된 로그 숨기기", value=False)
     
     cctv_dropdown = st.selectbox(
@@ -107,13 +105,11 @@ with col_left:
     st.markdown("---")
     
     def render_log_cards(target_tab_name):
-        # 1. 탭 및 채널 필터링 적용
         if cctv_dropdown == "전체 채널 보기":
             filtered_logs = [log for log in st.session_state.mock_logs if log["tab"] == target_tab_name]
         else:
             filtered_logs = [log for log in st.session_state.mock_logs if log["tab"] == target_tab_name and cctv_dropdown in log['channel']]
         
-        # 2. 피드백 완료 숨기기 체크박스 활성화 시 필터링
         if hide_completed:
             filtered_logs = [log for log in filtered_logs if log["status"] == "대기중"]
             
@@ -123,26 +119,40 @@ with col_left:
 
         for log in filtered_logs:
             is_selected = (log["id"] == st.session_state.selected_id_tracker)
-            card_class = "custom-log-card-selected" if is_selected else "custom-log-card"
-            badge_class = "badge-pending" if log["status"] == "대기중" else "badge-done"
             
-            # 💡 [핵심 교정] 카드 내부에 HTML 양식으로 시간, 채널, 설명, 대기중 뱃지를 완벽하게 보존
-            st.markdown(f"""
-                <div class="{card_class}">
-                    <div class="card-left-info">
-                        <div>🕒 {log['time']} | {log['channel']}</div>
-                        <div class="card-desc">{log['desc']}</div>
+            # 선택 여부에 따라 버튼에 동적으로 다른 CSS 클래스를 주입하기 위한 트릭
+            if is_selected:
+                st.markdown(f"""
+                    <style>
+                    div.stButton > button[key="card_{log['id']}"] {{
+                        border: 2px solid #FFD700 !important;
+                        background-color: #0f172a !important;
+                        box-shadow: 0px 0px 10px rgba(255, 215, 0, 0.2) !important;
+                    }}
+                    </style>
+                """, unsafe_allow_html=True)
+            
+            badge_html = f'<span class="status-badge-green">대기중</span>' if log["status"] == "대기중" else f'<span class="status-badge-gray">{log["status"]}</span>'
+            
+            # 버튼 내부에 들어갈 풍부한 텍스트 구조 정의 (완벽 복구)
+            button_inside_html = f"""
+                <div class="card-flex">
+                    <div style="text-align: left;">
+                        <div class="card-meta">🕒 {log['time']} | {log['channel']}</div>
+                        <div class="card-main-title">{log['desc']}</div>
                     </div>
-                    <div class="{badge_class}">
-                        {log['status']}
+                    <div>
+                        {badge_html}
                     </div>
                 </div>
-            """, unsafe_allow_html=True)
+            """
             
-            # 투명 버튼을 카드 밑에 투과시켜 사각형 영역 어디를 눌러도 클릭 이벤트가 잡히도록 설계
-            if st.button(f"선택: {log['id']}", key=f"click_trigger_{log['id']}", use_container_width=True):
+            # [해결 핵심] 별도의 HTML 태그를 먼저 그리지 않고, 오직 '하나의 커스텀 버튼'만 생성하여 레이아웃을 완전히 통일합니다.
+            if st.button(button_inside_html, key=f"card_{log['id']}", use_container_width=True):
                 st.session_state.selected_id_tracker = log["id"]
                 st.rerun()
+                
+            st.markdown('<div style="margin-bottom: 10px;"></div>', unsafe_allow_html=True)
 
     with tab_danger:
         render_log_cards("위험")
