@@ -8,7 +8,7 @@ if "mock_logs" not in st.session_state:
         {"id": "LOG-01", "tab": "위험", "time": "14:20:05", "channel": "CCTV 1대 (Area 1)", "desc": "Potential worker fall detected.", "status": "Pending", "media_type": "video", "feedback": ""},
         {"id": "LOG-02", "tab": "위험", "time": "16:42:10", "channel": "CCTV 3대 (Stacking Area)", "desc": "Forklift collision risk near loading bay.", "status": "Pending", "media_type": "video", "feedback": ""},
         {"id": "LOG-03", "tab": "경고", "time": "09:15:22", "channel": "CCTV 2대 (Safety Path)", "desc": "Worker without hard hat identified.", "status": "Pending", "media_type": "image", "feedback": ""},
-        {"id": "LOG-04", "tab": "경고", "time": "11:30:12", "channel": "CCTV 4대 (的外郭 Outer Fence)", "desc": "Worker without safety vest identified.", "status": "Pending", "media_type": "image", "feedback": ""},
+        {"id": "LOG-04", "tab": "경고", "time": "11:30:12", "channel": "CCTV 4대 (Outer Fence)", "desc": "Worker without safety vest identified.", "status": "Pending", "media_type": "image", "feedback": ""},
         {"id": "LOG-05", "tab": "피드백", "time": "10:05:43", "channel": "CCTV 1대 (Area 1)", "desc": "Missed detection report (fall).", "status": "Pending", "media_type": "image", "feedback": ""},
     ]
 
