@@ -12,5 +12,5 @@ page2 = st.Page("page2.py", title="모델 성능 개선 피드백", icon="📈")
 page3 = st.Page("page3.py", title="새 클래스 학습 및 DB", icon="🔄")
 
 # 2. 내비게이션 실행 (우선 1번 페이지만 사이드바에 나타납니다)
-pg = st.navigation([page1, page2]) 
+pg = st.navigation([page1, page2, page3]) 
 pg.run()
