@@ -2,79 +2,79 @@ import streamlit as st
 import numpy as np
 import cv2
 
-# --- 1. 세션 상태 초기화 (오타 완벽 수정) ---
+# --- 1. 세션 상태 및 가상 데이터 초기화 ---
 if "mock_logs" not in st.session_state:
     st.session_state.mock_logs = [
-        {"id": "LOG-01", "tab": "위험", "time": "14:20:05", "channel": "CCTV 1대 (Area 1)", "desc": "Potential worker fall detected.", "status": "Pending", "media_type": "video", "feedback": ""},
-        {"id": "LOG-02", "tab": "위험", "time": "16:42:10", "channel": "CCTV 3대 (Stacking Area)", "desc": "Forklift collision risk near loading bay.", "status": "Pending", "media_type": "video", "feedback": ""},
-        {"id": "LOG-03", "tab": "경고", "time": "09:15:22", "channel": "CCTV 2대 (Safety Path)", "desc": "Worker without hard hat identified.", "status": "Pending", "media_type": "image", "feedback": ""},
-        {"id": "LOG-04", "tab": "경고", "time": "11:30:12", "channel": "CCTV 4대 (Outer Fence)", "desc": "Worker without safety vest identified.", "status": "Pending", "media_type": "image", "feedback": ""},
-        {"id": "LOG-05", "tab": "피드백", "time": "10:05:43", "channel": "CCTV 1대 (Area 1)", "desc": "Missed detection report (fall).", "status": "Pending", "media_type": "image", "feedback": ""},
+        {"id": "LOG-01", "tab": "위험", "time": "14:20:05", "channel": "CCTV 1대 (Area 1)", "desc": "작업자 추락 의심 상황 발생", "status": "Pending", "media_type": "video", "feedback": ""},
+        {"id": "LOG-02", "tab": "위험", "time": "16:42:10", "channel": "CCTV 3대 (Stacking Area)", "desc": "지게차 충돌 위험 감지", "status": "Pending", "media_type": "video", "feedback": ""},
+        {"id": "LOG-03", "tab": "경고", "time": "09:15:22", "channel": "CCTV 2대 (Safety Path)", "desc": "안전모 미착용 작업자 발견", "status": "Pending", "media_type": "image", "feedback": ""},
+        {"id": "LOG-04", "tab": "경고", "time": "11:30:12", "channel": "CCTV 4대 (Outer Fence)", "desc": "안전조끼 미착용 작업자 발견", "status": "Pending", "media_type": "image", "feedback": ""},
+        {"id": "LOG-05", "tab": "피드백", "time": "10:05:43", "channel": "CCTV 1대 (Area 1)", "desc": "미탐지 신고 접수 (추락)", "status": "Pending", "media_type": "image", "feedback": ""},
     ]
 
-# 현재 어떤 로그가 선택되어 있는지 추적 (기본값은 첫 번째 로그)
 if "selected_id_tracker" not in st.session_state:
     st.session_state.selected_id_tracker = st.session_state.mock_logs[0]["id"]
 
-# --- 2. 디자인 전용 CSS 주입 ---
+# --- 2. 와이어프레임 맞춤형 CSS 주입 ---
+# [변경 포인트] 클릭 가능한 st.button 자체를 카드 형태로 스타일링하여 이중 클릭을 없앱니다.
 st.markdown("""
     <style>
-    .log-card {
-        background-color: #1e293b;
-        border: 2px solid #334155;
-        border-radius: 10px;
-        padding: 15px;
-        margin-bottom: 12px;
-        color: #f1f5f9;
+    /* Streamlit 기본 버튼을 커스텀 카드 스타일로 전면 개편 */
+    div.stButton > button {
+        background-color: #1e293b !important;
+        border: 2px solid #334155 !important;
+        border-radius: 10px !important;
+        padding: 20px 15px !important;
+        margin-bottom: 0px !important;
+        color: #f1f5f9 !important;
+        text-align: left !important;
+        width: 100% !important;
+        display: block !important;
+        transition: all 0.2s ease;
     }
-    .log-card-selected {
-        background-color: #262730;
-        border: 2px solid #FFD700 !important;
-        border-radius: 10px;
-        padding: 15px;
-        margin-bottom: 12px;
-        color: #ffffff;
-        box-shadow: 0px 0px 10px rgba(255, 215, 0, 0.3);
+    
+    /* 마우스를 올렸을 때의 효과 */
+    div.stButton > button:hover {
+        border-color: #64748b !important;
+        background-color: #334155 !important;
     }
-    .card-header {
-        font-size: 13px;
-        color: #94a3b8;
+
+    /* 선택된 전용 투명 박스 레이아웃 오버레이 및 상태 관리용 */
+    .status-container {
         display: flex;
         justify-content: space-between;
-        margin-bottom: 5px;
+        font-size: 13px;
+        color: #94a3b8;
+        margin-bottom: 8px;
+        width: 100%;
     }
-    .card-body {
-        font-size: 15px;
+    .card-title-text {
+        font-size: 16px;
+        font-weight: bold;
+        color: #ffffff;
+    }
+    .status-pending-tag {
+        color: #38bdf8;
         font-weight: bold;
     }
-    .status-badge {
+    .status-done-tag {
+        color: #facc15;
         font-weight: bold;
-        padding: 2px 6px;
-        border-radius: 4px;
     }
-    .status-pending { color: #38bdf8; }
-    .status-done { color: #facc15; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("📈 위험/경고 로그 및 모델 피드백 관제소")
 
-# --- 🖥️ 2분할 레이아웃 ---
+# --- 🖥️ 2분할 레이아웃 (좌: 45% / 우: 55%) ---
 col_left, col_right = st.columns([45, 55])
 
-# ⬅️ [좌측 구역]
+# ⬅ silence [좌측 구역]
 with col_left:
     st.subheader("📋 관제 로그 목록 (List view)")
     
     tab_danger, tab_warn, tab_feedback = st.tabs(["🚨 위험 (Danger)", "⚠️ 경고 (Warning)", "🔍 피드백 (Feedback)"])
     
-    cctv_dropdown = st.selectbox(
-        "📅 필터링 / 채널 선택",
-        ["CCTV 1대 (Area 1)", "CCTV 2대 (Safety Path)", "CCTV 3대 (Stacking Area)", "CCTV 4대 (Outer Fence)"]
-    )
-    
-    st.markdown("---")
-# 1. 드롭다운 메뉴에 '전체 보기'를 추가하여 데이터 유실을 방지합니다.
     cctv_dropdown = st.selectbox(
         "📅 필터링 / 채널 선택",
         ["전체 채널 보기", "CCTV 1대 (Area 1)", "CCTV 2대 (Safety Path)", "CCTV 3대 (Stacking Area)", "CCTV 4대 (Outer Fence)"]
@@ -83,11 +83,10 @@ with col_left:
     st.markdown("---")
     
     def render_log_cards(target_tab_name):
-        # 2. '전체 채널 보기'일 때는 채널 필터를 패스하고, 특정 채널 선택 시에만 엄격하게 매칭합니다.
         if cctv_dropdown == "전체 채널 보기":
             filtered_logs = [log for log in st.session_state.mock_logs if log["tab"] == target_tab_name]
         else:
-            filtered_logs = [log for log in st.session_state.mock_logs if log["tab"] == target_tab_name and cctv_dropdown == log['channel']]
+            filtered_logs = [log for log in st.session_state.mock_logs if log["tab"] == target_tab_name and cctv_dropdown in log['channel']]
         
         if not filtered_logs:
             st.info("이 카테고리/채널에 대기 중인 로그가 없습니다.")
@@ -95,25 +94,38 @@ with col_left:
 
         for log in filtered_logs:
             is_selected = (log["id"] == st.session_state.selected_id_tracker)
-            card_style = "log-card-selected" if is_selected else "log-card"
             
-            st.markdown(f"""
-                <div class="{card_style}">
-                    <div class="card-header">
-                        <span>🕒 {log['time']} | {log['channel']}</span>
-                        <span class="status-badge {'status-done' if log['status'] != 'Pending' else 'status-pending'}">
-                            [{log['status']}]
-                        </span>
-                    </div>
-                    <div class="card-body">
-                        {log['desc']}
-                    </div>
+            # 💡 [핵심 구현] 만약 현재 선택된 로그라면, Streamlit 컴포넌트 ID를 추적하여 
+            # 해당 버튼 테두리만 와이어프레임처럼 노란색으로 강제 주입합니다.
+            if is_selected:
+                st.markdown(f"""
+                    <style>
+                    div.stButton > button[key*="{log['id']}"] {{
+                        border: 2px solid #FFD700 !important;
+                        background-color: #0f172a !important;
+                        box-shadow: 0px 0px 10px rgba(255, 215, 0, 0.3);
+                    }}
+                    </style>
+                """, unsafe_allow_html=True)
+            
+            # 카드 내부 레이아웃 정의
+            status_tag_html = f'<span class="status-done-tag">[{log["status"]}]</span>' if log["status"] != "Pending" else f'<span class="status-pending-tag">[{log["status"]}]</span>'
+            
+            card_content = f"""
+                <div class="status-container">
+                    <span>🕒 {log['time']} | {log['channel']}</span>
+                    {status_tag_html}
                 </div>
-            """, unsafe_allow_html=True)
+                <div class="card-title-text">{log['desc']}</div>
+            """
             
-            if st.button(f"📄 상세 보기: {log['id']}", key=f"btn_select_{log['id']}", use_container_width=True):
+            # 개별 카드 자체를 하나의 버튼으로 생성하여 버튼 없이 다이렉트로 클릭 이벤트를 받습니다.
+            if st.button(log['id'], key=f"card_btn_{log['id']}", use_container_width=True):
                 st.session_state.selected_id_tracker = log["id"]
                 st.rerun()
+                
+            # 버튼 바로 아래에 스타일 보정용 마진 추가
+            st.markdown('<div style="margin-bottom: 12px;"></div>', unsafe_allow_html=True)
 
     with tab_danger:
         render_log_cards("위험")
