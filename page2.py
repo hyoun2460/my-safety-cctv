@@ -74,9 +74,20 @@ with col_left:
     )
     
     st.markdown("---")
+# 1. 드롭다운 메뉴에 '전체 보기'를 추가하여 데이터 유실을 방지합니다.
+    cctv_dropdown = st.selectbox(
+        "📅 필터링 / 채널 선택",
+        ["전체 채널 보기", "CCTV 1대 (Area 1)", "CCTV 2대 (Safety Path)", "CCTV 3대 (Stacking Area)", "CCTV 4대 (Outer Fence)"]
+    )
+    
+    st.markdown("---")
     
     def render_log_cards(target_tab_name):
-        filtered_logs = [log for log in st.session_state.mock_logs if log["tab"] == target_tab_name and cctv_dropdown in log['channel']]
+        # 2. '전체 채널 보기'일 때는 채널 필터를 패스하고, 특정 채널 선택 시에만 엄격하게 매칭합니다.
+        if cctv_dropdown == "전체 채널 보기":
+            filtered_logs = [log for log in st.session_state.mock_logs if log["tab"] == target_tab_name]
+        else:
+            filtered_logs = [log for log in st.session_state.mock_logs if log["tab"] == target_tab_name and cctv_dropdown == log['channel']]
         
         if not filtered_logs:
             st.info("이 카테고리/채널에 대기 중인 로그가 없습니다.")
